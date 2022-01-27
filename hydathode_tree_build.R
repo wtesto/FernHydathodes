@@ -3,8 +3,6 @@ library(geiger)
 library(phytools)
 library(dplyr)
 
-setwd()#set wd here)
-
 ##Part One: Trimming Testo & Sundue (2016) tree to genus-level sampling
 
 setwd("~/Desktop/Projects/Hydathodes/")
@@ -28,13 +26,15 @@ tree<-read.tree("generaTree.tre")
 
 scoredTraits<-read.csv("hydathodeScoring.csv")
 
-unknownGenera <- scoredTraits %>% filter(Scoring == "u")
+unknownGenera <- scoredTraits %>% filter(Scoring == "unknown")
 
 generaToDrop <- unknownGenera$Genus %>% as.vector()
 
 reducedTree <- drop.tip(tree, generaToDrop)
 
-write.tree(reducedTree, "treeReduce.tre")
+write.tree(reducedTree, "treeReducea.tre")
+
+
 
 ##Part Three: Generating plots of tip state distribution and ACR
 
@@ -44,29 +44,29 @@ X<-read.csv("hydathodeScoring.csv", row.names = 1)
 
 state<-X[tree$tip.label,]
 
-cols<-setNames(c("#377eb8", "#e41a1c", "#4daf4a", "#ffff33", "#000000"), levels(state))
-colsALT<-setNames(c("#377eb8", "#e41a1c", "#ff7f00", "#ffff33", "#000000"), levels(state))
+cols<-setNames(c("#377eb8", "#e41a1c", "#ff7f00", "#ffff33", "#000000"), levels(state))
 legendNames<-c("Absent", "All Present", "Enlarged Vein Endings", "Present in Some Species", "Unknown")
 
 pdf(file = "Figures/HydathodeTipMap.pdf", width = 8, height = 8)
 
 plotTree(tree,type="fan",fsize=0.3,ftype="i",lwd=0.5, offset = 3)
 
-tiplabels(pie=to.matrix(state,sort(unique(state))),piecol=cols,cex=0.15)
+tiplabels(pie=to.matrix(state,sort(unique(state))),piecol=cols,cex=0.1)
 
 add.simmap.legend(leg= legendNames, colors=cols,prompt=FALSE,x=0.9*par()$usr[1],
-                  y=-max(0.9*nodeHeights(tree)),fsize=0.5, shape = "circle")
+                  y=-max(0.9*nodeHeights(tree)),fsize=0.3, shape = "circle")
 dev.off()
 
 
+
+### ACR for trimmed tree
 treeReduce<-read.tree("treeReduce.tre")
 
 Y<-read.csv("hydathodeScoringReduced.csv", row.names = 1)
 
 stateReduce<-Y[treeReduce$tip.label,]
 
-cols2<-setNames(c("#377eb8", "#e41a1c", "#4daf4a", "#ffff33"), levels(stateReduce))
-cols2ALT<-setNames(c("#377eb8", "#e41a1c", "#ff7f00", "#ffff33"), levels(stateReduce))
+cols2<-setNames(c("#377eb8", "#e41a1c", "#ff7f00", "#ffff33"), levels(stateReduce))
 
 legendNamesReduced<-c("Absent", "All Present", "Enlarged Vein Endings", "Present in Some Species")
 
@@ -76,7 +76,7 @@ pdf(file = "Figures/Hydathode_ACR", width = 8, height = 8)
 
 plotTree(treeReduce,type="fan",fsize=0.3,ftype="i",lwd=0.5, offset = 3)
 
-tiplabels(pie=to.matrix(stateReduce,sort(unique(stateReduce))),piecol=cols2,cex=0.2)
+tiplabels(pie=to.matrix(stateReduce,sort(unique(stateReduce))),piecol=cols2,cex=0.15)
 
 nodelabels(node=1:treeReduce$Nnode+Ntip(treeReduce),
            pie=fitER_Reduce$lik.anc,piecol=cols2,cex=0.3)
@@ -86,5 +86,51 @@ add.simmap.legend(leg=legendNamesReduced, colors=cols2,prompt=FALSE,x=0.9*par()$
 dev.off()
 
 
+### ACR for trimmed tree
+
+stateReduceVector <- as.vector(stateReduce) #transform states to vector
+
+stateReduceVector <- gsub("sp", "ap", stateReduceVector) ##recode presence 
+
+stateReduceVector <- gsub("ev", "ap", stateReduceVector) ##recode presence
+
+names(stateReduceVector) <- treeReduce$tip.label 
+
+levels<-levels(as.factor(stateReduceVector))
+
+cols2<-setNames(c("#377eb8", "#e41a1c"), levels)
+
+legendNamesReduced<-c("Absent", "Present")
+
+fitER <- fitMk(treeReduce, stateReduceVector, model = "ER") ##fit model for simmap rates
 
 
+Q <- matrix(NA, length(levels),length(levels)) #make simmap transition matrix
+Q[1,]<-c(-0.005,0.005)
+Q[2,]<-c(0.005,-0.005)
+colnames(Q) <- rownames(Q) <- fitQ$states
+
+simmapReduce <- make.simmap(treeReduce, stateReduceVector, Q = Q, nsim = 500)
+
+simmapReduceSummary <- summary(simmapReduce)
+
+simmapReduceCount <- countSimmap(simmapReduce)
+
+
+pdf(file = "Figures/Hydathode_SimMap.pdf", width = 8, height = 8)
+
+plot(simmapReduceSummary,colors = cols2,type = "fan",
+     fsize = 0.3,cex = c(0.175, 0.175), lwd= 0.25, offset = 10)
+
+add.simmap.legend(leg=legendNamesReduced, colors=cols2,prompt=FALSE,x=0.9*par()$usr[1],
+                  y=-max(0.9*nodeHeights(treeReduce)),fsize=0.5, shape = "circle")
+
+dev.off()
+
+meanAP <- mean(simmapReduceCount$Tr[,3])
+
+meanPA <- mean(simmapReduceCount$Tr[,4])
+
+sdAP <- sd(simmapReduceCount$Tr[,3])
+
+sdPA <- sd(simmapReduceCount$Tr[,4])
